@@ -4,10 +4,9 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICE_NAME="pi5_mqtt"
-PYTHON=$(command -v python3)
+VENV="$SCRIPT_DIR/.venv"
 
 echo "==> Directorio: $SCRIPT_DIR"
-echo "==> Python: $PYTHON"
 
 echo ""
 echo "==> Verificando .env..."
@@ -18,8 +17,12 @@ if [ ! -f "$SCRIPT_DIR/.env" ]; then
 fi
 
 echo ""
+echo "==> Creando entorno virtual..."
+python3 -m venv "$VENV"
+
+echo ""
 echo "==> Instalando dependencias Python..."
-pip3 install -r "$SCRIPT_DIR/requirements.txt"
+"$VENV/bin/pip" install -r "$SCRIPT_DIR/requirements.txt"
 
 echo ""
 echo "==> Creando servicio systemd..."
@@ -33,7 +36,7 @@ Wants=mosquitto.service
 Type=simple
 User=$USER
 WorkingDirectory=$SCRIPT_DIR
-ExecStart=$PYTHON $SCRIPT_DIR/main.py
+ExecStart=$VENV/bin/python $SCRIPT_DIR/main.py
 Restart=always
 RestartSec=5
 StandardOutput=journal

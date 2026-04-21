@@ -4,9 +4,10 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICE_NAME="pi5_mqtt"
+VENV="$SCRIPT_DIR/.venv"
 
 echo "==> Actualizando dependencias Python..."
-pip3 install -r "$SCRIPT_DIR/requirements.txt"
+"$VENV/bin/pip" install -r "$SCRIPT_DIR/requirements.txt"
 
 echo "==> Reiniciando servicio..."
 sudo systemctl restart ${SERVICE_NAME}
