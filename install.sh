@@ -25,6 +25,17 @@ echo "==> Instalando dependencias Python..."
 "$VENV/bin/pip" install -r "$SCRIPT_DIR/requirements.txt"
 
 echo ""
+echo "==> Configurando sudoers (NOPASSWD para comandos del sistema)..."
+sudo tee /etc/sudoers.d/pi5_mqtt > /dev/null <<EOF
+# Permite al servicio pi5_mqtt ejecutar estos comandos sin contraseña
+$USER ALL=(root) NOPASSWD: /usr/bin/wg show wg0 latest-handshakes
+$USER ALL=(root) NOPASSWD: /usr/sbin/smartctl -A /dev/nvme0
+$USER ALL=(root) NOPASSWD: /usr/bin/fail2ban-client status sshd
+$USER ALL=(root) NOPASSWD: /usr/bin/cscli decisions list
+EOF
+sudo chmod 440 /etc/sudoers.d/pi5_mqtt
+
+echo ""
 echo "==> Creando servicio systemd..."
 sudo tee /etc/systemd/system/${SERVICE_NAME}.service > /dev/null <<EOF
 [Unit]
