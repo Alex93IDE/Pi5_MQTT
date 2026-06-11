@@ -1,3 +1,4 @@
+import re
 import time
 import psutil
 from datetime import datetime
@@ -106,6 +107,25 @@ def get_slow_data():
     d["svc_softkey"] = svc_active("softkey")
     d["svc_mqtt"]    = svc_active("mosquitto")
     d["svc_bitflex"] = svc_active("bitflex")
+
+    ufw_out = run("sudo ufw status numbered 2>/dev/null")
+    ufw_lines = ufw_out.splitlines()
+    d["ufw_status"] = "active" if ufw_lines and "active" in ufw_lines[0].lower() else "inactive"
+    _ufw_re = re.compile(
+        r'^\[\s*(\d+)\]\s+(.+?)\s+(ALLOW|DENY|REJECT|LIMIT)\s+(IN|OUT|FWD)\s+(.+)$'
+    )
+    rules = []
+    for line in ufw_lines:
+        m = _ufw_re.match(line.strip())
+        if not m:
+            continue
+        rules.append({
+            "num":    int(m.group(1)),
+            "to":     m.group(2).strip(),
+            "action": m.group(3) + " " + m.group(4),
+            "from":   m.group(5).strip(),
+        })
+    d["ufw_rules"] = rules
 
     d["timestamp"] = datetime.now().isoformat()
     return d
