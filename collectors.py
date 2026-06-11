@@ -105,6 +105,7 @@ def get_slow_data():
     d["svc_bouncer"] = svc_active("crowdsec-firewall-bouncer")
     d["svc_softkey"] = svc_active("softkey")
     d["svc_mqtt"]    = svc_active("mosquitto")
+    d["svc_bitflex"] = svc_active("bitflex")
 
     d["timestamp"] = datetime.now().isoformat()
     return d
