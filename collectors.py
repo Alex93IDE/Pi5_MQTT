@@ -5,7 +5,7 @@ from datetime import datetime
 from helpers import run, svc_active, get_pironman5_config
 
 
-# ── Datos rápidos (cada 1s) ────────────────────────────────
+# ── Fast data (every 1s) ───────────────────────────────────
 def get_fast_data():
     d = {}
 
@@ -64,7 +64,7 @@ def get_fast_data():
     return d
 
 
-# ── Datos lentos (cada 30s) ────────────────────────────────
+# ── Slow data (every 30s) ──────────────────────────────────
 def get_slow_data():
     d = {}
 

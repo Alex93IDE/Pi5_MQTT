@@ -17,7 +17,7 @@ def svc_active(name):
 
 
 def run_json(cmd):
-    """Como run() pero retorna el JSON parseado o None"""
+    """Like run() but returns the parsed JSON, or None on failure"""
     try:
         result = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL).decode().strip()
         return json.loads(result)
@@ -26,7 +26,7 @@ def run_json(cmd):
 
 
 def get_pironman5_config():
-    """Lee la config actual del pironman5"""
+    """Read the current Pironman5 configuration"""
     data = run_json(f"curl -s {API}/get-config")
     if data and data.get("status"):
         return data["data"]["system"]

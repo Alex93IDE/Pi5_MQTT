@@ -1,33 +1,33 @@
 #!/bin/bash
-# Primera instalación en la Pi. Ejecutar una sola vez.
+# First-time setup on the Pi. Run this once.
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICE_NAME="pi5_mqtt"
 VENV="$SCRIPT_DIR/.venv"
 
-echo "==> Directorio: $SCRIPT_DIR"
+echo "==> Directory: $SCRIPT_DIR"
 
 echo ""
-echo "==> Verificando .env..."
+echo "==> Checking .env..."
 if [ ! -f "$SCRIPT_DIR/.env" ]; then
     cp "$SCRIPT_DIR/.env.example" "$SCRIPT_DIR/.env"
-    echo "    Creado .env desde .env.example — edítalo antes de continuar."
+    echo "    Created .env from .env.example — edit it before continuing."
     exit 1
 fi
 
 echo ""
-echo "==> Creando entorno virtual..."
+echo "==> Creating virtualenv..."
 python3 -m venv "$VENV"
 
 echo ""
-echo "==> Instalando dependencias Python..."
+echo "==> Installing Python dependencies..."
 "$VENV/bin/pip" install -r "$SCRIPT_DIR/requirements.txt"
 
 echo ""
-echo "==> Configurando sudoers (NOPASSWD para comandos del sistema)..."
+echo "==> Setting up sudoers (NOPASSWD for system commands)..."
 sudo tee /etc/sudoers.d/pi5_mqtt > /dev/null <<EOF
-# Permite al servicio pi5_mqtt ejecutar estos comandos sin contraseña
+# Lets the pi5_mqtt service run these commands without a password
 $USER ALL=(root) NOPASSWD: /usr/bin/wg show wg0 latest-handshakes
 $USER ALL=(root) NOPASSWD: /usr/sbin/smartctl -A /dev/nvme0
 $USER ALL=(root) NOPASSWD: /usr/bin/fail2ban-client status sshd
@@ -36,7 +36,7 @@ EOF
 sudo chmod 440 /etc/sudoers.d/pi5_mqtt
 
 echo ""
-echo "==> Creando servicio systemd..."
+echo "==> Creating systemd service..."
 sudo tee /etc/systemd/system/${SERVICE_NAME}.service > /dev/null <<EOF
 [Unit]
 Description=Pi5 MQTT Publisher
@@ -62,5 +62,5 @@ sudo systemctl enable ${SERVICE_NAME}
 sudo systemctl start ${SERVICE_NAME}
 
 echo ""
-echo "==> Instalación completa! Estado del servicio:"
+echo "==> Done! Service status:"
 sudo systemctl status ${SERVICE_NAME} --no-pager
