@@ -12,7 +12,7 @@ def main():
 
     last_slow = 0
 
-    print("Publisher iniciado. Ctrl+C para salir.")
+    print("Publisher started. Ctrl+C to exit.")
     while True:
         try:
             fast = get_fast_data()

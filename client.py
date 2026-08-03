@@ -10,13 +10,13 @@ def create_client():
 
     def on_connect(c, userdata, flags, rc, properties=None):
         if rc == 0:
-            print(f"[mqtt] Conectado al broker")
+            print("[mqtt] Connected to broker")
             c.subscribe(TOPIC_CTRL)
         else:
-            print(f"[mqtt] Error de conexión: {rc}")
+            print(f"[mqtt] Connection error: {rc}")
 
     def on_disconnect(c, userdata, flags, rc, properties=None):
-        print(f"[mqtt] Desconectado ({rc}), reconectando...")
+        print(f"[mqtt] Disconnected ({rc}), reconnecting...")
 
     def on_message(c, userdata, msg):
         try:
