@@ -2,7 +2,11 @@ import re
 import time
 import psutil
 from datetime import datetime
-from helpers import run, svc_active, get_pironman5_config
+from helpers import run, svc_active, docker_running, get_pironman5_config
+from config import (
+    WG_INTERFACE, NVME_DEVICE, F2B_JAIL, FAN_INPUT, CS_ENABLE,
+    SERVICES, DOCKER_SERVICES,
+)
 
 
 # ── Fast data (every 1s) ───────────────────────────────────
@@ -24,7 +28,7 @@ def get_fast_data():
     except:
         d["cpu_temp"] = 0
 
-    d["fan_rpm"] = int(run("cat /sys/class/hwmon/hwmon0/fan1_input") or "0")
+    d["fan_rpm"] = int(run(f"cat {FAN_INPUT}") or "0") if FAN_INPUT else 0
 
     s = int(time.time() - psutil.boot_time())
     days, s = divmod(s, 86400)
@@ -39,7 +43,9 @@ def get_fast_data():
     d["disk_used"]  = round(disk.used  / (1024**3), 1)
     d["disk_total"] = round(disk.total / (1024**3), 1)
 
-    wg_out = run("sudo wg show wg0 latest-handshakes 2>/dev/null")
+    wg_out = run(
+        f"sudo wg show {WG_INTERFACE} latest-handshakes 2>/dev/null"
+    ) if WG_INTERFACE else ""
     now    = int(time.time())
     active = total = 0
     for line in wg_out.splitlines():
@@ -68,7 +74,7 @@ def get_fast_data():
 def get_slow_data():
     d = {}
 
-    sm = run("sudo smartctl -A /dev/nvme0")
+    sm = run(f"sudo smartctl -A {NVME_DEVICE}") if NVME_DEVICE else ""
     for line in sm.splitlines():
         if "Temperature:" in line and "Sensor" not in line:
             d["nvme_temp"] = float(line.split()[1])
@@ -88,25 +94,18 @@ def get_slow_data():
     d["nvme_unsafe"] = sm_val("Unsafe Shutdowns:")
     d["nvme_errors"] = sm_val("Media and Data Integrity Errors:")
 
-    d["f2b_bans"] = run(
-        "sudo fail2ban-client status sshd 2>/dev/null"
+    d["f2b_bans"] = (run(
+        f"sudo fail2ban-client status {F2B_JAIL} 2>/dev/null"
         " | grep 'Currently banned' | awk '{print $NF}'"
-    ) or "0"
-    d["cs_bans"] = run(
+    ) or "0") if F2B_JAIL else "0"
+    d["cs_bans"] = (run(
         "sudo cscli decisions list 2>/dev/null | grep -c ban"
-    ) or "0"
+    ) or "0") if CS_ENABLE else "0"
 
-    d["svc_wgdash"]  = svc_active("wgdashboard")
-    d["svc_adguard"] = (
-        run("docker inspect -f '{{.State.Running}}' adguardhome 2>/dev/null") == "true"
-    )
-    d["svc_cloud"]   = svc_active("cloudflared")
-    d["svc_f2b"]     = svc_active("fail2ban")
-    d["svc_cs"]      = svc_active("crowdsec")
-    d["svc_bouncer"] = svc_active("crowdsec-firewall-bouncer")
-    d["svc_softkey"] = svc_active("softkey")
-    d["svc_mqtt"]    = svc_active("mosquitto")
-    d["svc_bitflex"] = svc_active("bitflex")
+    for alias, unit in SERVICES:
+        d[f"svc_{alias}"] = svc_active(unit)
+    for alias, container in DOCKER_SERVICES:
+        d[f"svc_{alias}"] = docker_running(container)
 
     ufw_out = run("sudo ufw status numbered 2>/dev/null")
     ufw_lines = ufw_out.splitlines()
