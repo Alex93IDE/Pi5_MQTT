@@ -2,8 +2,8 @@ import json
 import os
 import tempfile
 import unittest
-from unittest.mock import MagicMock, patch
-import services
+from unittest.mock import patch
+from pi5mqtt.services import favorites, systemd, docker, control
 
 UNITS = [
     {"unit": "mosquitto.service", "load": "loaded", "active": "active", "sub": "running", "description": "Mosquitto"},
@@ -21,100 +21,104 @@ def fake_run_json(cmd):
 
 
 class ServicesTestCase(unittest.TestCase):
-    """Isolates every test from the real favorites.json and systemctl."""
+    """Isolates every test from the real favorites.json, systemctl and Docker."""
 
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.fav_file = os.path.join(tmp.name, "favorites.json")
         for p in (
-            patch.object(services, "FAVORITES_FILE", self.fav_file),
-            patch.object(services, "_favorites", {"systemd": set(), "docker": set()}),
-            patch.object(services, "run_json", fake_run_json),
-            patch.object(services, "run", return_value=""),
+            patch.object(favorites, "store", favorites.Favorites(self.fav_file)),
+            patch.object(systemd, "run_json", fake_run_json),
+            patch.object(docker, "run", return_value=""),
         ):
             p.start()
             self.addCleanup(p.stop)
 
 
-class GetSystemd(ServicesTestCase):
+class Systemd(ServicesTestCase):
     def test_lists_installed_units_with_state(self):
-        by_name = {s["name"]: s for s in services.get_systemd()}
+        by_name = {s["name"]: s for s in systemd.collect()}
         self.assertNotIn("ghost.service", by_name)
         self.assertEqual(by_name["mosquitto.service"]["enabled"], "enabled")
         self.assertFalse(by_name["mosquitto.service"]["favorite"])
 
     def test_instance_falls_back_to_template_state(self):
-        by_name = {s["name"]: s for s in services.get_systemd()}
+        by_name = {s["name"]: s for s in systemd.collect()}
         self.assertEqual(by_name["getty@tty1.service"]["enabled"], "enabled")
 
     def test_systemctl_unavailable(self):
-        with patch.object(services, "run_json", return_value=None):
-            self.assertEqual(services.get_systemd(), [])
+        with patch.object(systemd, "run_json", return_value=None):
+            self.assertEqual(systemd.collect(), [])
 
 
-class GetDocker(ServicesTestCase):
+class Docker(unittest.TestCase):
     def test_parses_one_container_per_line(self):
         out = (
             '{"Names": "pihole", "Image": "pihole/pihole", "State": "running", "Status": "Up 3 days"}\n'
             "not json\n"
             '{"Names": "old", "Image": "busybox", "State": "exited", "Status": "Exited (0)"}\n'
         )
-        with patch.object(services, "run", return_value=out):
-            containers = services.get_docker()
+        containers = docker.parse_ps(out, favs={"old"})
         self.assertEqual([c["name"] for c in containers], ["pihole", "old"])
+        self.assertEqual([c["favorite"] for c in containers], [False, True])
         self.assertEqual(containers[0]["state"], "running")
 
     def test_no_docker(self):
-        self.assertEqual(services.get_docker(), [])
+        self.assertEqual(docker.parse_ps(""), [])
 
 
-class Favorites(ServicesTestCase):
-    def favorite(self, **payload):
-        client = MagicMock()
-        services.handle_services_control(client, {"action": "favorite", **payload})
-        return client
+class FavoritesStore(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.path = os.path.join(tmp.name, "favorites.json")
 
-    def test_star_saves_and_republishes(self):
-        client = self.favorite(source="systemd", name="mosquitto.service", value=True)
+    def test_set_saves_and_survives_reload(self):
+        favorites.Favorites(self.path).set("systemd", "a.service", True)
+        with open(self.path) as f:
+            self.assertEqual(json.load(f), {"systemd": ["a.service"], "docker": []})
+        self.assertEqual(favorites.Favorites(self.path).names("systemd"), {"a.service"})
 
-        with open(self.fav_file) as f:
-            self.assertEqual(json.load(f), {"systemd": ["mosquitto.service"], "docker": []})
+    def test_unset(self):
+        store = favorites.Favorites(self.path)
+        store.set("docker", "pihole", True)
+        store.set("docker", "pihole", False)
+        self.assertEqual(favorites.Favorites(self.path).names("docker"), set())
 
-        client.publish.assert_called_once()
-        topic, payload = client.publish.call_args.args
-        self.assertEqual(topic, services.TOPIC_SERVICES)
-        starred = [s["name"] for s in json.loads(payload) if s["favorite"]]
+    def test_corrupt_or_odd_file_starts_empty(self):
+        for content in ("{not json", "[1, 2]"):
+            with self.subTest(content=content):
+                with open(self.path, "w") as f:
+                    f.write(content)
+                self.assertEqual(favorites.Favorites(self.path).names("systemd"), set())
+
+    def test_names_is_a_copy(self):
+        store = favorites.Favorites(self.path)
+        store.names("systemd").add("sneaky")
+        self.assertEqual(store.names("systemd"), set())
+
+
+class FavoriteCommand(ServicesTestCase):
+    def test_star_returns_changed_source(self):
+        changed = control.handle({"action": "favorite", "source": "systemd", "name": "mosquitto.service", "value": True})
+        self.assertEqual(changed, "systemd")
+        starred = [s["name"] for s in systemd.collect() if s["favorite"]]
         self.assertEqual(starred, ["mosquitto.service"])
-
-    def test_unstar(self):
-        self.favorite(source="systemd", name="mosquitto.service", value=True)
-        self.favorite(source="systemd", name="mosquitto.service", value=False)
-        with open(self.fav_file) as f:
-            self.assertEqual(json.load(f)["systemd"], [])
-
-    def test_survives_reload(self):
-        self.favorite(source="systemd", name="mosquitto.service", value=True)
-        self.assertEqual(services._load_favorites()["systemd"], {"mosquitto.service"})
 
     def test_rejected(self):
         cases = [
-            {"source": "systemd", "name": "nope.service", "value": True},
-            {"source": "systemd", "name": "mosquitto.service", "value": "true"},
-            {"source": "apt", "name": "mosquitto.service", "value": True},
-            {"source": "systemd", "name": ["mosquitto.service"], "value": True},
+            {"action": "favorite", "source": "systemd", "name": "nope.service", "value": True},
+            {"action": "favorite", "source": "systemd", "name": "mosquitto.service", "value": "true"},
+            {"action": "favorite", "source": "apt", "name": "mosquitto.service", "value": True},
+            {"action": "favorite", "source": "systemd", "name": ["mosquitto.service"], "value": True},
+            {"action": "restart", "source": "systemd", "name": "mosquitto.service"},
         ]
         for payload in cases:
             with self.subTest(payload=payload):
                 with self.assertLogs("services", level="WARNING"):
-                    client = self.favorite(**payload)
-                client.publish.assert_not_called()
+                    self.assertIsNone(control.handle(payload))
         self.assertFalse(os.path.exists(self.fav_file))
-
-    def test_corrupt_file_starts_empty(self):
-        with open(self.fav_file, "w") as f:
-            f.write("{not json")
-        self.assertEqual(services._load_favorites(), {"systemd": set(), "docker": set()})
 
 
 if __name__ == "__main__":

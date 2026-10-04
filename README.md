@@ -47,7 +47,7 @@ Don't be alarmed when most of the list says `inactive`. Plenty of services only 
 
 Everything is published as retained, so a dashboard that connects gets the latest numbers straight away instead of staring at blanks until the next update.
 
-Payload shapes are defined in `collectors.py` and `services.py` — that's the place to add, drop or rename fields to match your own machine.
+Each topic runs on its own, so a slow read — SMART data, the service list — never holds up the once-a-second numbers. Want to add, drop or rename a field to match your own machine? See [Making it your own](#making-it-your-own).
 
 ## Control commands
 
@@ -215,21 +215,44 @@ The tests need nothing beyond the normal dependencies, and none of them touch yo
 
 They cover the parts that are easy to break without noticing: reading the firewall and VPN output, rejecting bad control commands, saving favourites, and making sure the dashboard server never hands out files from outside `public/`.
 
+## Making it your own
+
+Every topic is wired up in one place, `pi5mqtt/app.py`. Each line there says what to publish, where, and how often:
+
+```python
+"slow": Publisher(TOPIC_SLOW, INTERVAL_SLOW, merged(storage.collect, security.collect)),
+```
+
+A collector is just a function that returns the data. To change what an existing topic sends, edit its collector — `metrics/storage.py` for the NVMe fields, say. To add a new topic, write a function that returns a dict or a list, and add a `Publisher` line for it. To publish it alongside other fields instead, add it to a `merged(...)`. Commands work the same way: `build_routes` maps each control topic to the function that handles it.
+
 ## Layout
 
 ```
-main.py          entry point, runs the fast and slow loops
-config.py        reads .env
-client.py        MQTT connection and callbacks
-collectors.py    gathers the fast and slow payloads
-control.py       handles incoming commands
-services.py      systemd/Docker topics and favourites
-server.py        optional static server for the dashboard
-helpers.py       small shell and API utilities
-install.sh       first-time setup
-update.sh        run after git pull
-uninstall.sh     removes the service and sudoers rule
-tests/           unit tests
+main.py                  entry point
+pi5mqtt/
+  app.py                 what gets published where, and who handles which command
+  scheduler.py           runs each topic on its own thread and its own clock
+  mqtt.py                broker connection, online/offline status
+  config.py              reads .env
+  shell.py               running commands, reading files
+  web.py                 optional static server for the dashboard
+  metrics/
+    system.py            CPU, memory, disk, network, uptime
+    vpn.py               WireGuard peers
+    storage.py           NVMe health
+    security.py          Fail2ban, CrowdSec, ufw
+  services/
+    systemd.py           the service list
+    docker.py            the container list
+    favorites.py         saving favourites
+    control.py           starring from the dashboard
+  pironman/
+    api.py               talking to the case software
+    control.py           checking case commands
+tests/                   unit tests
+install.sh               first-time setup
+update.sh                run after git pull
+uninstall.sh             removes the service and sudoers rule
 ```
 
 ## License

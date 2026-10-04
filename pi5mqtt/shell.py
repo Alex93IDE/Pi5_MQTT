@@ -1,7 +1,5 @@
 import subprocess
 import json
-import urllib.request
-from config import API
 
 
 def run(cmd):
@@ -12,6 +10,15 @@ def run(cmd):
         ).decode().strip()
     except (subprocess.CalledProcessError, OSError, UnicodeDecodeError):
         return ""
+
+
+def sudo(cmd):
+    """run() as root via the sudoers rules install.sh sets up.
+
+    -n makes sudo fail straight away instead of waiting for a password
+    nobody is going to type, if a rule is missing.
+    """
+    return run(f"sudo -n {cmd}")
 
 
 def run_json(cmd):
@@ -29,15 +36,3 @@ def read_file(path):
             return f.read().strip()
     except OSError:
         return ""
-
-
-def get_pironman5_config():
-    """Read the current Pironman5 configuration"""
-    try:
-        with urllib.request.urlopen(f"{API}/get-config", timeout=2) as r:
-            data = json.load(r)
-    except (OSError, ValueError):
-        return {}
-    if isinstance(data, dict) and data.get("status"):
-        return data.get("data", {}).get("system", {})
-    return {}

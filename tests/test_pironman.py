@@ -1,18 +1,18 @@
 import json
 import unittest
 from unittest.mock import patch
-import control
+from pi5mqtt.pironman import control, api
 
 
 class HandleControl(unittest.TestCase):
     def setUp(self):
-        patcher = patch.object(control, "_post")
+        patcher = patch.object(api, "post")
         self.post = patcher.start()
         self.addCleanup(patcher.stop)
 
     def send(self, raw):
         # Go through json.loads like a real MQTT message does.
-        control.handle_control(json.loads(raw))
+        control.handle(json.loads(raw))
 
     def test_valid_commands(self):
         cases = [
@@ -55,6 +55,20 @@ class HandleControl(unittest.TestCase):
                 with self.assertLogs("ctrl", level="WARNING"):
                     self.send(raw)
                 self.post.assert_not_called()
+
+
+class PironmanState(unittest.TestCase):
+    def test_defaults_when_api_is_down(self):
+        with patch.object(api, "get_config", return_value={}):
+            state = api.collect()
+        self.assertEqual(state["rgb_enable"], False)
+        self.assertEqual(state["fan_mode"], 1)
+
+    def test_maps_api_fields(self):
+        cfg = {"rgb_enable": True, "rgb_color": "#ff0000", "gpio_fan_mode": 3}
+        with patch.object(api, "get_config", return_value=cfg):
+            state = api.collect()
+        self.assertEqual((state["rgb_enable"], state["rgb_color"], state["fan_mode"]), (True, "#ff0000", 3))
 
 
 if __name__ == "__main__":

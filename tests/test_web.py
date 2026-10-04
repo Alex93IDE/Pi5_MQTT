@@ -6,7 +6,7 @@ import urllib.error
 import urllib.request
 from functools import partial
 from http.server import ThreadingHTTPServer
-from server import SpaHandler
+from pi5mqtt.web import SpaHandler
 
 
 class SpaServer(unittest.TestCase):

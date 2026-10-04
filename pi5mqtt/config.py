@@ -1,7 +1,11 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+# The repo root: .env, favorites.json and public/ live here, one level
+# above this package.
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 
 MQTT_HOST     = os.getenv("MQTT_HOST", "localhost")
@@ -16,14 +20,15 @@ TOPIC_DOCKER        = os.getenv("TOPIC_DOCKER", "pi5/docker")
 TOPIC_CTRL_SERVICES = os.getenv("TOPIC_CTRL_SERVICES", "pi5/control/services")
 TOPIC_STATUS        = os.getenv("TOPIC_STATUS", "pi5/status")
 API           = os.getenv("PIRONMAN_API", "http://localhost:34001/api/v1.0")
-INTERVAL_FAST = int(os.getenv("INTERVAL_FAST", 1))
-INTERVAL_SLOW = int(os.getenv("INTERVAL_SLOW", 30))
+INTERVAL_FAST = float(os.getenv("INTERVAL_FAST", 1))
+INTERVAL_SLOW = float(os.getenv("INTERVAL_SLOW", 30))
 
 # Optional static server for the dashboard. Leave HTTP_PORT empty to disable.
 HTTP_HOST     = os.getenv("HTTP_HOST", "0.0.0.0")
 HTTP_PORT     = int(os.getenv("HTTP_PORT") or 0)
-WEB_ROOT      = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                             os.getenv("WEB_ROOT", "public"))
+WEB_ROOT      = os.path.join(BASE_DIR, os.getenv("WEB_ROOT", "public"))
+
+FAVORITES_FILE = os.path.join(BASE_DIR, "favorites.json")
 
 # Host-specific bits. Leave any of these empty to skip that metric entirely.
 WG_INTERFACE    = os.getenv("WG_INTERFACE", "wg0")

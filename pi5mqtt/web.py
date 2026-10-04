@@ -3,7 +3,7 @@ import os
 import threading
 from functools import partial
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
-from config import HTTP_HOST, HTTP_PORT, WEB_ROOT
+from .config import HTTP_HOST, HTTP_PORT, WEB_ROOT
 
 log = logging.getLogger("http")
 

@@ -1,5 +1,8 @@
 import unittest
-from collectors import parse_ufw, parse_wg_handshakes, default_route_interface
+from pi5mqtt.metrics.security import parse_ufw
+from pi5mqtt.metrics.storage import parse_smart
+from pi5mqtt.metrics.system import default_route_interface, format_uptime
+from pi5mqtt.metrics.vpn import parse_wg_handshakes
 
 UFW_ACTIVE = """Status: active
 
@@ -59,6 +62,47 @@ class DefaultRoute(unittest.TestCase):
     def test_no_default_route(self):
         self.assertEqual(default_route_interface("Iface\tDestination\nwg0\t0008000A\n"), "")
         self.assertEqual(default_route_interface(""), "")
+
+
+SMART = """smartctl 7.3 2022-02-28 r5338 [aarch64-linux-6.6.31+rpt-rpi-2712] (local build)
+=== START OF SMART DATA SECTION ===
+SMART/Health Information (NVMe Log 0x02)
+Critical Warning:                   0x00
+Temperature:                        41 Celsius
+Available Spare:                    100%
+Available Spare Threshold:          10%
+Percentage Used:                    1%
+Power On Hours:                     3,234
+Unsafe Shutdowns:                   12
+Media and Data Integrity Errors:    0
+Temperature Sensor 1:               46 Celsius
+"""
+
+
+class ParseSmart(unittest.TestCase):
+    def test_reads_fields(self):
+        self.assertEqual(parse_smart(SMART), {
+            "nvme_temp": 41.0,
+            "nvme_spare": "100%",
+            "nvme_used": "1%",
+            "nvme_hours": "3,234",
+            "nvme_unsafe": "12",
+            "nvme_errors": "0",
+        })
+
+    def test_spare_threshold_does_not_shadow_spare(self):
+        self.assertEqual(parse_smart(SMART)["nvme_spare"], "100%")
+
+    def test_no_output(self):
+        d = parse_smart("")
+        self.assertEqual(d["nvme_temp"], 0)
+        self.assertEqual(d["nvme_hours"], "?")
+
+
+class FormatUptime(unittest.TestCase):
+    def test_format(self):
+        self.assertEqual(format_uptime(0), "0d 0h 0m")
+        self.assertEqual(format_uptime(2 * 86400 + 3 * 3600 + 59 * 60 + 59), "2d 3h 59m")
 
 
 if __name__ == "__main__":
