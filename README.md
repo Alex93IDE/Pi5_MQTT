@@ -93,6 +93,9 @@ And `bash uninstall.sh` removes the service and the sudoers rule, leaving the re
 | `TOPIC_CTRL` | `pi5/control/pironman` | control topic |
 | `INTERVAL_FAST` | `1` | fast loop interval, in seconds |
 | `INTERVAL_SLOW` | `30` | slow loop interval, in seconds |
+| `HTTP_HOST` | `0.0.0.0` | interface the dashboard server listens on |
+| `HTTP_PORT` | — | port to serve the dashboard on; empty disables it |
+| `WEB_ROOT` | `public` | folder the dashboard is served from |
 
 Then the host-specific half. **Leave any of these empty and that metric is skipped entirely** — no command runs, no sudoers rule is granted, the field just reports zero:
 
@@ -115,6 +118,23 @@ DOCKER_SERVICES=dns:pihole
 
 `.env` is gitignored, so both your credentials and the inventory of what runs on your machine stay on the machine.
 
+## Serving the dashboard
+
+The daemon can also serve [pi5_dash](https://github.com/Alex93IDE/pi5_dash) itself, so you don't need nginx for a LAN or VPN setup. Set `HTTP_PORT` in `.env`, then point the dashboard's `DEPLOY_TARGET` at this repo's `public/` folder and run `npm run deploy` there:
+
+```
+DEPLOY_TARGET=user@pi:~/Pi5_mqtt/public/
+```
+
+No restart needed after a deploy — files are read on every request. Unknown routes fall back to `index.html`, so reloading the page on any route works. The browser still talks to the broker over its WebSocket listener; this only hands out the files.
+
+It's plain HTTP with no auth, so keep it on your LAN or VPN and let ufw decide who gets in:
+
+```bash
+sudo ufw allow from 192.168.1.0/24 to any port 8080 proto tcp comment 'pi5_dash'
+sudo ufw allow in on wg0 to any port 8080 proto tcp comment 'pi5_dash'
+```
+
 ## Security notes
 
 Worth reading before you point this at anything:
@@ -131,6 +151,7 @@ config.py        reads .env
 client.py        MQTT connection and callbacks
 collectors.py    gathers the fast and slow payloads
 control.py       handles incoming commands
+server.py        optional static server for the dashboard
 helpers.py       small shell/systemd/API utilities
 install.sh       first-time setup
 update.sh        run after git pull

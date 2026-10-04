@@ -4,9 +4,11 @@ import json
 from config import TOPIC_FAST, TOPIC_SLOW, INTERVAL_FAST, INTERVAL_SLOW
 from client import create_client
 from collectors import get_fast_data, get_slow_data
+from server import start_server
 
 
 def main():
+    start_server()
     client = create_client()
     time.sleep(1)
 

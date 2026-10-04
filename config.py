@@ -31,6 +31,12 @@ API           = os.getenv("PIRONMAN_API", "http://localhost:34001/api/v1.0")
 INTERVAL_FAST = int(os.getenv("INTERVAL_FAST", 1))
 INTERVAL_SLOW = int(os.getenv("INTERVAL_SLOW", 30))
 
+# Optional static server for the dashboard. Leave HTTP_PORT empty to disable.
+HTTP_HOST     = os.getenv("HTTP_HOST", "0.0.0.0")
+HTTP_PORT     = int(os.getenv("HTTP_PORT") or 0)
+WEB_ROOT      = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             os.getenv("WEB_ROOT", "public"))
+
 # Host-specific bits. Leave any of these empty to skip that metric entirely.
 WG_INTERFACE    = os.getenv("WG_INTERFACE", "wg0")
 NVME_DEVICE     = os.getenv("NVME_DEVICE", "/dev/nvme0")
