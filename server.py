@@ -1,8 +1,11 @@
+import logging
 import os
 import threading
 from functools import partial
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from config import HTTP_HOST, HTTP_PORT, WEB_ROOT
+
+log = logging.getLogger("http")
 
 
 class SpaHandler(SimpleHTTPRequestHandler):
@@ -41,10 +44,10 @@ def start_server():
         return None
 
     if not os.path.isfile(os.path.join(WEB_ROOT, "index.html")):
-        print(f"[http] {WEB_ROOT}/index.html not found — deploy the dashboard there")
+        log.warning("%s/index.html not found — deploy the dashboard there", WEB_ROOT)
 
     handler = partial(SpaHandler, directory=WEB_ROOT)
     httpd = ThreadingHTTPServer((HTTP_HOST, HTTP_PORT), handler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
-    print(f"[http] Serving {WEB_ROOT} on {HTTP_HOST}:{HTTP_PORT}")
+    log.info("Serving %s on %s:%s", WEB_ROOT, HTTP_HOST, HTTP_PORT)
     return httpd

@@ -14,6 +14,7 @@ TOPIC_CTRL    = os.getenv("TOPIC_CTRL", "pi5/control/pironman")
 TOPIC_SERVICES      = os.getenv("TOPIC_SERVICES", "pi5/services")
 TOPIC_DOCKER        = os.getenv("TOPIC_DOCKER", "pi5/docker")
 TOPIC_CTRL_SERVICES = os.getenv("TOPIC_CTRL_SERVICES", "pi5/control/services")
+TOPIC_STATUS        = os.getenv("TOPIC_STATUS", "pi5/status")
 API           = os.getenv("PIRONMAN_API", "http://localhost:34001/api/v1.0")
 INTERVAL_FAST = int(os.getenv("INTERVAL_FAST", 1))
 INTERVAL_SLOW = int(os.getenv("INTERVAL_SLOW", 30))
@@ -30,3 +31,5 @@ NVME_DEVICE     = os.getenv("NVME_DEVICE", "/dev/nvme0")
 F2B_JAIL        = os.getenv("F2B_JAIL", "sshd")
 FAN_INPUT       = os.getenv("FAN_INPUT", "/sys/class/hwmon/hwmon0/fan1_input")
 CS_ENABLE       = os.getenv("CS_ENABLE", "false").lower() == "true"
+# Interface to measure throughput on. Empty follows the default route.
+NET_INTERFACE   = os.getenv("NET_INTERFACE", "")

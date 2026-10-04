@@ -1,3 +1,4 @@
+import logging
 import os
 import json
 import threading
@@ -6,6 +7,8 @@ from config import TOPIC_SERVICES, TOPIC_DOCKER
 
 FAVORITES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "favorites.json")
 SOURCES = ("systemd", "docker")
+
+log = logging.getLogger("services")
 
 # The control callback runs on paho's thread, the loop on the main one.
 _lock = threading.Lock()
@@ -111,13 +114,13 @@ def handle_services_control(client, payload):
     name   = payload.get("name")
     value  = payload.get("value")
     if source not in SOURCES or not isinstance(name, str) or not isinstance(value, bool):
-        print(f"[services] Bad favorite command: {payload}")
+        log.warning("Bad favorite command: %s", payload)
         return
 
     # Only accept names that actually exist, so the file can't fill with junk.
     _, collect = _COLLECTORS[source]
     if not any(item["name"] == name for item in collect()):
-        print(f"[services] Unknown {source} name: {name}")
+        log.warning("Unknown %s name: %s", source, name)
         return
 
     with _lock:

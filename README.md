@@ -10,7 +10,9 @@ I built it for my own setup, but it's small enough that adapting it should be pa
 
 ## What it publishes
 
-**`pi5/fast`** — once a second: CPU load, frequency and temperature, RAM, disk usage, fan RPM, uptime, local IP, active VPN peer count, and the current Pironman5 state (RGB colour, style, brightness and speed; OLED; fan mode).
+**`pi5/fast`** — once a second: CPU load (overall and per core), frequency, temperature and load average, RAM, disk usage, network traffic, fan RPM, uptime, local IP, active VPN peer count, and the current Pironman5 state (RGB colour, style, brightness and speed; OLED; fan mode).
+
+Network traffic is `net_rx` and `net_tx`, in bytes per second, measured on whichever interface your internet goes through (`net_iface` says which one). Set `NET_INTERFACE` if you'd rather watch a different one.
 
 **`pi5/slow`** — every 30 seconds, because these are slower or more expensive to read: NVMe health from SMART, ban counters from the host's intrusion-prevention tools, and the firewall ruleset parsed into JSON.
 
@@ -40,6 +42,8 @@ Don't be alarmed when most of the list says `inactive`. Plenty of services only 
   "favorite": false
 }
 ```
+
+**`pi5/status`** — `online` or `offline`. Because everything above is retained, a dashboard would otherwise keep showing the last numbers it got even if the Pi had been unplugged an hour ago. This topic is how it can tell. The daemon sets it to `online` when it connects, and if it crashes or the Pi drops off the network, the broker flips it to `offline` on its own. Stopping the service cleanly does the same.
 
 Everything is published as retained, so a dashboard that connects gets the latest numbers straight away instead of staring at blanks until the next update.
 
@@ -118,6 +122,12 @@ That creates a virtualenv, installs the Python dependencies, adds a sudoers rule
 
 **About that sudoers rule:** it whitelists five specific read-only commands and nothing else — no wildcards, no shell. You can see exactly which ones near the top of `install.sh`, and I'd encourage you to read them before running anything with `sudo`. If you'd rather not grant that at all, delete those lines; the affected fields just come back as zeros.
 
+To see what it's up to — connections, rejected commands, anything that went wrong:
+
+```bash
+journalctl -u pi5_mqtt -f
+```
+
 To update later:
 
 ```bash
@@ -142,6 +152,7 @@ And `bash uninstall.sh` removes the service and the sudoers rule, leaving the re
 | `TOPIC_SERVICES` | `pi5/services` | systemd services topic |
 | `TOPIC_DOCKER` | `pi5/docker` | Docker containers topic |
 | `TOPIC_CTRL_SERVICES` | `pi5/control/services` | favourites control topic |
+| `TOPIC_STATUS` | `pi5/status` | online/offline topic |
 | `INTERVAL_FAST` | `1` | fast loop interval, in seconds |
 | `INTERVAL_SLOW` | `30` | slow loop interval, in seconds |
 | `HTTP_HOST` | `0.0.0.0` | interface the dashboard server listens on |
@@ -157,6 +168,7 @@ Then the host-specific half. **Leave any of these empty and that metric is skipp
 | `F2B_JAIL` | `sshd` | jail to read the ban counter from |
 | `FAN_INPUT` | `/sys/class/hwmon/hwmon0/fan1_input` | sysfs path for fan RPM |
 | `CS_ENABLE` | `false` | whether to query CrowdSec decisions |
+| `NET_INTERFACE` | — | interface to measure traffic on; empty follows your internet connection |
 
 `.env` is gitignored, so your credentials stay on the machine.
 
@@ -193,6 +205,16 @@ Worth reading before you point this at anything:
 - **The control topics have no authorisation of their own.** Anyone who can publish to them can drive the case hardware or change favourites. Broker-level ACLs are what keeps that honest.
 - **Nothing here should face the internet directly.** There's no auth layer in this code, by design — it assumes it's sitting behind a broker that has one.
 
+## Running the tests
+
+The tests need nothing beyond the normal dependencies, and none of them touch your real system — no MQTT broker, no systemd, no hardware:
+
+```bash
+.venv/bin/python -m unittest
+```
+
+They cover the parts that are easy to break without noticing: reading the firewall and VPN output, rejecting bad control commands, saving favourites, and making sure the dashboard server never hands out files from outside `public/`.
+
 ## Layout
 
 ```
@@ -207,6 +229,7 @@ helpers.py       small shell and API utilities
 install.sh       first-time setup
 update.sh        run after git pull
 uninstall.sh     removes the service and sudoers rule
+tests/           unit tests
 ```
 
 ## License
