@@ -13,3 +13,4 @@ dist/
 build/
 .claude/
 public/
+favorites.json

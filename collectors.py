@@ -2,10 +2,9 @@ import re
 import time
 import psutil
 from datetime import datetime
-from helpers import run, svc_active, docker_running, get_pironman5_config
+from helpers import run, get_pironman5_config
 from config import (
     WG_INTERFACE, NVME_DEVICE, F2B_JAIL, FAN_INPUT, CS_ENABLE,
-    SERVICES, DOCKER_SERVICES,
 )
 
 
@@ -101,11 +100,6 @@ def get_slow_data():
     d["cs_bans"] = (run(
         "sudo cscli decisions list 2>/dev/null | grep -c ban"
     ) or "0") if CS_ENABLE else "0"
-
-    for alias, unit in SERVICES:
-        d[f"svc_{alias}"] = svc_active(unit)
-    for alias, container in DOCKER_SERVICES:
-        d[f"svc_{alias}"] = docker_running(container)
 
     ufw_out = run("sudo ufw status numbered 2>/dev/null")
     ufw_lines = ufw_out.splitlines()

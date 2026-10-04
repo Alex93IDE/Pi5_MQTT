@@ -10,11 +10,23 @@ I built it for my own setup, but it's small enough that adapting it should be pa
 
 **`pi5/fast`** — once a second: CPU load, frequency and temperature, RAM, disk usage, fan RPM, uptime, local IP, active VPN peer count, and the current Pironman5 state (RGB colour, style, brightness and speed; OLED; fan mode).
 
-**`pi5/slow`** — every 30 seconds, because these are slower or more expensive to read: NVMe health from SMART, ban counters from the host's intrusion-prevention tools, systemd status for a handful of services, and the firewall ruleset parsed into JSON.
+**`pi5/slow`** — every 30 seconds, because these are slower or more expensive to read: NVMe health from SMART, ban counters from the host's intrusion-prevention tools, and the firewall ruleset parsed into JSON.
 
 Both payloads go out with `retain=True`, so anything that subscribes gets the last known state right away instead of waiting for the next tick.
 
-Payload shapes are defined in `collectors.py` — that's the place to add, drop or rename fields to match your own machine.
+**`pi5/services`** — every 30 seconds: every systemd service unit, running or not, as a list:
+
+```json
+[{"name": "mosquitto.service", "active": "active", "sub": "running", "description": "Mosquitto MQTT Broker", "favorite": true}]
+```
+
+**`pi5/docker`** — every 30 seconds: every Docker container, running or not. An empty list if Docker isn't installed or the service user can't reach it:
+
+```json
+[{"name": "pihole", "image": "pihole/pihole", "state": "running", "status": "Up 3 days", "favorite": false}]
+```
+
+Payload shapes are defined in `collectors.py` and `services.py` — that's the place to add, drop or rename fields to match your own machine.
 
 ## Control commands
 
@@ -37,6 +49,16 @@ For example:
 ```
 
 Under the hood these are HTTP calls to the Pironman5 API, which the case software runs locally.
+
+### Favourites
+
+Each entry in `pi5/services` and `pi5/docker` carries a `favorite` flag, so a dashboard can pick which ones to feature. To change one, publish to `pi5/control/services`:
+
+```json
+{"action": "favorite", "source": "systemd", "name": "mosquitto.service", "value": true}
+```
+
+`source` is `systemd` or `docker`, and `name` has to match an entry that currently exists. The daemon saves the change to `favorites.json` next to the code (gitignored, survives restarts and updates) and republishes that topic straight away, so the new flag shows up within a moment instead of on the next 30-second tick.
 
 ## Requirements
 
@@ -91,6 +113,9 @@ And `bash uninstall.sh` removes the service and the sudoers rule, leaving the re
 | `TOPIC_FAST` | `pi5/fast` | fast metrics topic |
 | `TOPIC_SLOW` | `pi5/slow` | slow metrics topic |
 | `TOPIC_CTRL` | `pi5/control/pironman` | control topic |
+| `TOPIC_SERVICES` | `pi5/services` | systemd services topic |
+| `TOPIC_DOCKER` | `pi5/docker` | Docker containers topic |
+| `TOPIC_CTRL_SERVICES` | `pi5/control/services` | favourites control topic |
 | `INTERVAL_FAST` | `1` | fast loop interval, in seconds |
 | `INTERVAL_SLOW` | `30` | slow loop interval, in seconds |
 | `HTTP_HOST` | `0.0.0.0` | interface the dashboard server listens on |
@@ -106,17 +131,8 @@ Then the host-specific half. **Leave any of these empty and that metric is skipp
 | `F2B_JAIL` | `sshd` | jail to read the ban counter from |
 | `FAN_INPUT` | `/sys/class/hwmon/hwmon0/fan1_input` | sysfs path for fan RPM |
 | `CS_ENABLE` | `false` | whether to query CrowdSec decisions |
-| `SERVICES` | — | systemd units to report on |
-| `DOCKER_SERVICES` | — | Docker containers to report on |
 
-`SERVICES` and `DOCKER_SERVICES` take comma-separated `alias:unit` pairs. The alias becomes the payload key, so `mqtt:mosquitto` publishes `svc_mqtt`, which means you can rename a field without touching the code. A bare name is its own alias:
-
-```
-SERVICES=mqtt:mosquitto,vpn:wg-quick@wg0,tailscaled
-DOCKER_SERVICES=dns:pihole
-```
-
-`.env` is gitignored, so both your credentials and the inventory of what runs on your machine stay on the machine.
+`.env` is gitignored, so your credentials stay on the machine.
 
 ## Serving the dashboard
 
@@ -139,8 +155,8 @@ sudo ufw allow in on wg0 to any port 8080 proto tcp comment 'pi5_dash'
 
 Worth reading before you point this at anything:
 
-- **The payload describes your machine.** It includes the local IP, the firewall ruleset and which services are up. That's the whole point on a private dashboard, but it's a gift to anyone else. Only publish to a broker you control, with authentication on, and use TLS if it's reachable beyond your LAN or VPN.
-- **The control topic has no authorisation of its own.** Anyone who can publish to it can drive the case hardware. Broker-level ACLs are what keeps that honest.
+- **The payload describes your machine.** It includes the local IP, the firewall ruleset and the full list of services and containers on the machine. That's the whole point on a private dashboard, but it's a gift to anyone else. Only publish to a broker you control, with authentication on, and use TLS if it's reachable beyond your LAN or VPN.
+- **The control topics have no authorisation of their own.** Anyone who can publish to them can drive the case hardware or change favourites. Broker-level ACLs are what keeps that honest.
 - **Nothing here should face the internet directly.** There's no auth layer in this code, by design — it assumes it's sitting behind a broker that has one.
 
 ## Layout
@@ -151,6 +167,7 @@ config.py        reads .env
 client.py        MQTT connection and callbacks
 collectors.py    gathers the fast and slow payloads
 control.py       handles incoming commands
+services.py      systemd/Docker topics and favourites
 server.py        optional static server for the dashboard
 helpers.py       small shell/systemd/API utilities
 install.sh       first-time setup

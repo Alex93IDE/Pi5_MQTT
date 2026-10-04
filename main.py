@@ -5,6 +5,7 @@ from config import TOPIC_FAST, TOPIC_SLOW, INTERVAL_FAST, INTERVAL_SLOW
 from client import create_client
 from collectors import get_fast_data, get_slow_data
 from server import start_server
+from services import publish_all as publish_services
 
 
 def main():
@@ -24,6 +25,7 @@ def main():
             if now - last_slow >= INTERVAL_SLOW:
                 slow = get_slow_data()
                 client.publish(TOPIC_SLOW, json.dumps(slow), qos=0, retain=True)
+                publish_services(client)
                 last_slow = now
 
         except Exception as e:

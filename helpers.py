@@ -12,16 +12,6 @@ def run(cmd):
         return ""
 
 
-def svc_active(name):
-    return run(f"systemctl is-active {name}") == "active"
-
-
-def docker_running(name):
-    """True if the named Docker container is up"""
-    cmd = "docker inspect -f '{{.State.Running}}' " + name + " 2>/dev/null"
-    return run(cmd) == "true"
-
-
 def run_json(cmd):
     """Like run() but returns the parsed JSON, or None on failure"""
     try:
