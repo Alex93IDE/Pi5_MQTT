@@ -2,7 +2,7 @@
 
 A small daemon that monitors a Raspberry Pi 5 (in a Pironman5 case) and exposes it over MQTT.
 
-It publishes system metrics to two topics — the cheap stuff every second, the slower stuff every 30 — and listens on a third one for commands, so you can toggle the case RGB from a dashboard or a phone instead of SSHing in every time.
+It publishes system metrics — the cheap stuff every second, the slower stuff every 30 — plus the full list of systemd services and Docker containers, and listens for commands, so you can toggle the case RGB or pick which services to feature from a dashboard or a phone instead of SSHing in every time. It can also serve that dashboard itself.
 
 I built it for my own setup, but it's small enough that adapting it should be painless. Everything worth changing lives in `.env`.
 
@@ -11,8 +11,6 @@ I built it for my own setup, but it's small enough that adapting it should be pa
 **`pi5/fast`** — once a second: CPU load, frequency and temperature, RAM, disk usage, fan RPM, uptime, local IP, active VPN peer count, and the current Pironman5 state (RGB colour, style, brightness and speed; OLED; fan mode).
 
 **`pi5/slow`** — every 30 seconds, because these are slower or more expensive to read: NVMe health from SMART, ban counters from the host's intrusion-prevention tools, and the firewall ruleset parsed into JSON.
-
-Both payloads go out with `retain=True`, so anything that subscribes gets the last known state right away instead of waiting for the next tick.
 
 **`pi5/services`** — every 30 seconds: every systemd service unit, running or not, as a list:
 
@@ -25,6 +23,8 @@ Both payloads go out with `retain=True`, so anything that subscribes gets the la
 ```json
 [{"name": "pihole", "image": "pihole/pihole", "state": "running", "status": "Up 3 days", "favorite": false}]
 ```
+
+Every topic goes out with `retain=True`, so anything that subscribes gets the last known state right away instead of waiting for the next tick.
 
 Payload shapes are defined in `collectors.py` and `services.py` — that's the place to add, drop or rename fields to match your own machine.
 
@@ -64,14 +64,16 @@ Each entry in `pi5/services` and `pi5/docker` carries a `favorite` flag, so a da
 
 A Raspberry Pi running a systemd-based distro, Python 3.9+, and an MQTT broker it can reach. The three Python dependencies are in `requirements.txt`.
 
-Beyond that, the collectors shell out to ordinary Linux tooling — SMART, systemd, the firewall, the VPN. Whatever isn't installed simply reports zero or `false` instead of crashing, so you can run it on a bare Pi and fill in the gaps later. The Pironman5 controls need the case software running; without it the RGB and fan fields stay at their defaults.
+Beyond that, the collectors shell out to ordinary Linux tooling — SMART, systemd, the firewall, the VPN. Whatever isn't installed simply reports zero, `false` or an empty list instead of crashing, so you can run it on a bare Pi and fill in the gaps later. The Pironman5 controls need the case software running; without it the RGB and fan fields stay at their defaults.
+
+Two things worth knowing for the service lists: `pi5/services` needs systemd 246 or newer (Raspberry Pi OS Bookworm ships 252), and `pi5/docker` only fills in if the user the service runs as can talk to Docker — usually that means `sudo usermod -aG docker $USER` and a restart of the service.
 
 ## Getting it running
 
 Clone it onto the Pi:
 
 ```bash
-git clone <repo-url> ~/Pi5_mqtt
+git clone https://github.com/Alex93IDE/Pi5_MQTT.git ~/Pi5_mqtt
 cd ~/Pi5_mqtt
 ```
 
@@ -90,7 +92,7 @@ bash install.sh
 
 That creates a virtualenv, installs the Python dependencies, adds a sudoers rule so the service can read a few root-only metrics without a password, and sets up a systemd unit called `pi5_mqtt` that starts on boot.
 
-**About that sudoers rule:** it whitelists four specific read-only commands and nothing else — no wildcards, no shell. You can see exactly which ones near the top of `install.sh`, and I'd encourage you to read them before running anything with `sudo`. If you'd rather not grant that at all, delete those lines; the affected fields just come back as zeros.
+**About that sudoers rule:** it whitelists five specific read-only commands and nothing else — no wildcards, no shell. You can see exactly which ones near the top of `install.sh`, and I'd encourage you to read them before running anything with `sudo`. If you'd rather not grant that at all, delete those lines; the affected fields just come back as zeros.
 
 To update later:
 
@@ -99,7 +101,7 @@ git pull
 bash update.sh
 ```
 
-And `bash uninstall.sh` removes the service and the sudoers rule, leaving the repo and the virtualenv alone.
+And `bash uninstall.sh` removes the service and the sudoers rule, leaving the repo, the virtualenv and your `favorites.json` alone.
 
 ## Configuration
 
@@ -136,7 +138,7 @@ Then the host-specific half. **Leave any of these empty and that metric is skipp
 
 ## Serving the dashboard
 
-The daemon can also serve [pi5_dash](https://github.com/Alex93IDE/pi5_dash) itself, so you don't need nginx for a LAN or VPN setup. Set `HTTP_PORT` in `.env`, then point the dashboard's `DEPLOY_TARGET` at this repo's `public/` folder and run `npm run deploy` there:
+The daemon can also serve [Pi5 Dashboard](https://github.com/Alex93IDE/Pi5_Dashboard) itself, so you don't need nginx for a LAN or VPN setup. Set `HTTP_PORT` in `.env`, then point the dashboard's `DEPLOY_TARGET` at this repo's `public/` folder and run `npm run deploy` there:
 
 ```
 DEPLOY_TARGET=user@pi:~/Pi5_mqtt/public/
@@ -144,11 +146,13 @@ DEPLOY_TARGET=user@pi:~/Pi5_mqtt/public/
 
 No restart needed after a deploy — files are read on every request. Unknown routes fall back to `index.html`, so reloading the page on any route works. The browser still talks to the broker over its WebSocket listener; this only hands out the files.
 
-It's plain HTTP with no auth, so keep it on your LAN or VPN and let ufw decide who gets in:
+It's plain HTTP with no auth, so keep it on your LAN or VPN and let ufw decide who gets in. The examples use port 3010, as in `.env.example`; the browser also needs to reach the broker's WebSocket port, so open that one to the same networks:
 
 ```bash
-sudo ufw allow from 192.168.1.0/24 to any port 8080 proto tcp comment 'pi5_dash'
-sudo ufw allow in on wg0 to any port 8080 proto tcp comment 'pi5_dash'
+sudo ufw allow from 192.168.1.0/24 to any port 3010 proto tcp comment 'pi5_dash'
+sudo ufw allow in on wg0 to any port 3010 proto tcp comment 'pi5_dash'
+sudo ufw allow from 192.168.1.0/24 to any port 9001 proto tcp comment 'mqtt ws'
+sudo ufw allow in on wg0 to any port 9001 proto tcp comment 'mqtt ws'
 ```
 
 ## Security notes
@@ -162,14 +166,14 @@ Worth reading before you point this at anything:
 ## Layout
 
 ```
-main.py          entry point, runs the two loops
+main.py          entry point, runs the fast and slow loops
 config.py        reads .env
 client.py        MQTT connection and callbacks
 collectors.py    gathers the fast and slow payloads
 control.py       handles incoming commands
 services.py      systemd/Docker topics and favourites
 server.py        optional static server for the dashboard
-helpers.py       small shell/systemd/API utilities
+helpers.py       small shell and API utilities
 install.sh       first-time setup
 update.sh        run after git pull
 uninstall.sh     removes the service and sudoers rule

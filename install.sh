@@ -47,6 +47,7 @@ CS_ENABLE="$(env_get CS_ENABLE false)"
     [ -n "$NVME_DEVICE" ]  && echo "$USER ALL=(root) NOPASSWD: /usr/sbin/smartctl -A $NVME_DEVICE"
     [ -n "$F2B_JAIL" ]     && echo "$USER ALL=(root) NOPASSWD: /usr/bin/fail2ban-client status $F2B_JAIL"
     [ "$CS_ENABLE" = "true" ] && echo "$USER ALL=(root) NOPASSWD: /usr/bin/cscli decisions list"
+    echo "$USER ALL=(root) NOPASSWD: /usr/sbin/ufw status numbered"
     true
 } | sudo tee /etc/sudoers.d/pi5_mqtt > /dev/null
 sudo chmod 440 /etc/sudoers.d/pi5_mqtt
