@@ -6,7 +6,7 @@ It publishes system metrics — the cheap stuff every second, the slower stuff e
 
 If you use [the dashboard](https://github.com/Alex93IDE/Pi5_Dashboard) that goes with it, the daemon can serve that too, so there's nothing else to set up.
 
-I built it for my own setup, but it's small enough that adapting it should be painless. Everything worth changing lives in `.env`.
+I built it for my own setup, but it's small enough that adapting it should be painless. Most of what you'd want to change lives in `.env`, and the rest is covered in [Making it your own](#making-it-your-own).
 
 ## What it publishes
 
@@ -43,9 +43,7 @@ Don't be alarmed when most of the list says `inactive`. Plenty of services only 
 }
 ```
 
-**`pi5/status`** — `online` or `offline`. Because everything above is retained, a dashboard would otherwise keep showing the last numbers it got even if the Pi had been unplugged an hour ago. This topic is how it can tell. The daemon sets it to `online` when it connects, and if it crashes or the Pi drops off the network, the broker flips it to `offline` on its own. Stopping the service cleanly does the same.
-
-Everything is published as retained, so a dashboard that connects gets the latest numbers straight away instead of staring at blanks until the next update.
+**`pi5/status`** — `online` or `offline`. Everything here is published as retained, so a dashboard that connects gets the latest numbers straight away instead of staring at blanks. The flip side is that it would keep showing them even if the Pi had been unplugged an hour ago — this topic is how it can tell. The daemon sets it to `online` when it connects, and if it crashes or the Pi drops off the network, the broker flips it to `offline` on its own. Stopping the service cleanly does the same.
 
 Each topic runs on its own, so a slow read — SMART data, the service list — never holds up the once-a-second numbers. Want to add, drop or rename a field to match your own machine? See [Making it your own](#making-it-your-own).
 
@@ -153,11 +151,12 @@ And `bash uninstall.sh` removes the service and the sudoers rule, leaving the re
 | `TOPIC_DOCKER` | `pi5/docker` | Docker containers topic |
 | `TOPIC_CTRL_SERVICES` | `pi5/control/services` | favourites control topic |
 | `TOPIC_STATUS` | `pi5/status` | online/offline topic |
-| `INTERVAL_FAST` | `1` | fast loop interval, in seconds |
-| `INTERVAL_SLOW` | `30` | slow loop interval, in seconds |
+| `INTERVAL_FAST` | `1` | how often `pi5/fast` goes out, in seconds |
+| `INTERVAL_SLOW` | `30` | how often `pi5/slow`, `pi5/services` and `pi5/docker` go out, in seconds |
 | `HTTP_HOST` | `0.0.0.0` | interface the dashboard server listens on |
 | `HTTP_PORT` | — | port to serve the dashboard on; empty disables it |
 | `WEB_ROOT` | `public` | folder the dashboard is served from |
+| `NET_INTERFACE` | — | network interface to measure traffic on; empty picks the one your internet goes through |
 
 Then the host-specific half. **Leave any of these empty and that metric is skipped entirely** — no command runs, no sudoers rule is granted, the field just reports zero:
 
@@ -168,7 +167,6 @@ Then the host-specific half. **Leave any of these empty and that metric is skipp
 | `F2B_JAIL` | `sshd` | jail to read the ban counter from |
 | `FAN_INPUT` | `/sys/class/hwmon/hwmon0/fan1_input` | sysfs path for fan RPM |
 | `CS_ENABLE` | `false` | whether to query CrowdSec decisions |
-| `NET_INTERFACE` | — | interface to measure traffic on; empty follows your internet connection |
 
 `.env` is gitignored, so your credentials stay on the machine.
 
@@ -213,7 +211,7 @@ The tests need nothing beyond the normal dependencies, and none of them touch yo
 .venv/bin/python -m unittest
 ```
 
-They cover the parts that are easy to break without noticing: reading the firewall and VPN output, rejecting bad control commands, saving favourites, and making sure the dashboard server never hands out files from outside `public/`.
+They cover the parts that are easy to break without noticing: reading the firewall, VPN and SMART output, rejecting bad control commands, saving favourites, keeping each topic on schedule, and making sure the dashboard server never hands out files from outside `public/`.
 
 ## Making it your own
 
@@ -223,7 +221,7 @@ Every topic is wired up in one place, `pi5mqtt/app.py`. Each line there says wha
 "slow": Publisher(TOPIC_SLOW, INTERVAL_SLOW, merged(storage.collect, security.collect)),
 ```
 
-A collector is just a function that returns the data. To change what an existing topic sends, edit its collector — `metrics/storage.py` for the NVMe fields, say. To add a new topic, write a function that returns a dict or a list, and add a `Publisher` line for it. To publish it alongside other fields instead, add it to a `merged(...)`. Commands work the same way: `build_routes` maps each control topic to the function that handles it.
+A collector is just a function that returns the data. To change what an existing topic sends, edit its collector — `pi5mqtt/metrics/storage.py` for the NVMe fields, say. To add a new topic, write a function that returns a dict or a list, and add a `Publisher` line for it. To publish it alongside other fields instead, add it to a `merged(...)`. Commands work the same way: `build_routes` maps each control topic to the function that handles it.
 
 ## Layout
 

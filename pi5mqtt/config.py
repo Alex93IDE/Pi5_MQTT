@@ -30,11 +30,12 @@ WEB_ROOT      = os.path.join(BASE_DIR, os.getenv("WEB_ROOT", "public"))
 
 FAVORITES_FILE = os.path.join(BASE_DIR, "favorites.json")
 
+# Interface to measure throughput on. Empty follows the default route.
+NET_INTERFACE  = os.getenv("NET_INTERFACE", "")
+
 # Host-specific bits. Leave any of these empty to skip that metric entirely.
 WG_INTERFACE    = os.getenv("WG_INTERFACE", "wg0")
 NVME_DEVICE     = os.getenv("NVME_DEVICE", "/dev/nvme0")
 F2B_JAIL        = os.getenv("F2B_JAIL", "sshd")
 FAN_INPUT       = os.getenv("FAN_INPUT", "/sys/class/hwmon/hwmon0/fan1_input")
 CS_ENABLE       = os.getenv("CS_ENABLE", "false").lower() == "true"
-# Interface to measure throughput on. Empty follows the default route.
-NET_INTERFACE   = os.getenv("NET_INTERFACE", "")
