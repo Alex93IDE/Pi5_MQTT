@@ -15,8 +15,10 @@ I built it for my own setup, but it's small enough that adapting it should be pa
 **`pi5/services`** — every 30 seconds: every systemd service unit, running or not, as a list:
 
 ```json
-[{"name": "mosquitto.service", "active": "active", "sub": "running", "description": "Mosquitto MQTT Broker", "favorite": true}]
+[{"name": "mosquitto.service", "active": "active", "sub": "running", "enabled": "enabled", "description": "Mosquitto MQTT Broker", "favorite": true}]
 ```
+
+Most of the list will be `inactive` — timer jobs between runs, on-demand and boot-only units — and that's normal. `enabled` is the unit file state (`enabled`, `disabled`, `static`, `masked`, …, or empty when there's no unit file), so a dashboard can tell a unit that's meant to be idle from an `enabled` one that isn't running.
 
 **`pi5/docker`** — every 30 seconds: every Docker container, running or not. An empty list if Docker isn't installed or the service user can't reach it:
 
@@ -36,11 +38,11 @@ Publish a JSON object to `pi5/control/pironman` with an `action` field:
 |---|---|---|
 | `oled_on` / `oled_off` | — | toggle the OLED |
 | `rgb_on` / `rgb_off` | — | toggle the RGB strip |
-| `rgb_color` | `color` (hex, e.g. `#ff0000`) | set the colour |
-| `rgb_style` | `style` (e.g. `breathing`) | set the animation |
-| `rgb_brightness` | `value` (0-100) | set brightness |
-| `rgb_speed` | `value` (0-100) | set animation speed |
-| `fan_mode` | `mode` (0-4) | 0 = always on, 1 = performance, 2 = cool, 3 = balance, 4 = silent |
+| `rgb_color` | `color`: `#rrggbb`, e.g. `#ff0000` | set the colour |
+| `rgb_style` | `style`: lowercase name, e.g. `breathing` | set the animation |
+| `rgb_brightness` | `value`: integer 0-100 | set brightness |
+| `rgb_speed` | `value`: integer 0-100 | set animation speed |
+| `fan_mode` | `mode`: integer 0-4 | 0 = always on, 1 = performance, 2 = cool, 3 = balance, 4 = silent |
 
 For example:
 
@@ -48,7 +50,7 @@ For example:
 {"action": "rgb_color", "color": "#00ff00"}
 ```
 
-Under the hood these are HTTP calls to the Pironman5 API, which the case software runs locally.
+The extra fields are required and checked before anything is sent: a malformed colour, an out-of-range number or a string where a number belongs is logged and dropped, never passed on. Valid commands become JSON POSTs to the Pironman5 API, which the case software runs locally — no shell is involved, so nothing in a payload can end up executed.
 
 ### Favourites
 

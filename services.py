@@ -32,9 +32,24 @@ _favorites = _load_favorites()
 
 
 # ── Collectors ─────────────────────────────────────────────
+def _unit_file_states():
+    """unit file -> enabled/disabled/static/masked/..."""
+    files = run_json("systemctl list-unit-files --type=service --output=json") or []
+    return {f["unit_file"]: f.get("state", "") for f in files}
+
+
+def _enabled(states, unit):
+    if unit in states:
+        return states[unit]
+    # Instances like getty@tty1.service only have a template unit file.
+    prefix, at, _ = unit.partition("@")
+    return states.get(f"{prefix}@.service", "") if at else ""
+
+
 def get_systemd():
     """Every service unit systemd knows about, running or not."""
     units = run_json("systemctl list-units --type=service --all --output=json") or []
+    states = _unit_file_states()
     with _lock:
         favs = set(_favorites["systemd"])
     return [
@@ -42,6 +57,7 @@ def get_systemd():
             "name":        u["unit"],
             "active":      u.get("active", ""),
             "sub":         u.get("sub", ""),
+            "enabled":     _enabled(states, u["unit"]),
             "description": u.get("description", ""),
             "favorite":    u["unit"] in favs,
         }
