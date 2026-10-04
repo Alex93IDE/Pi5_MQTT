@@ -2,7 +2,9 @@
 
 A small daemon that monitors a Raspberry Pi 5 (in a Pironman5 case) and exposes it over MQTT.
 
-It publishes system metrics — the cheap stuff every second, the slower stuff every 30 — plus the full list of systemd services and Docker containers, and listens for commands, so you can toggle the case RGB or pick which services to feature from a dashboard or a phone instead of SSHing in every time. It can also serve that dashboard itself.
+It publishes system metrics — the cheap stuff every second, the slower stuff every 30 — along with everything systemd and Docker are running. It also listens for commands, so you can change the case lighting or pick your favourite services from a dashboard or a phone instead of SSHing in every time.
+
+If you use [the dashboard](https://github.com/Alex93IDE/Pi5_Dashboard) that goes with it, the daemon can serve that too, so there's nothing else to set up.
 
 I built it for my own setup, but it's small enough that adapting it should be painless. Everything worth changing lives in `.env`.
 
@@ -12,21 +14,34 @@ I built it for my own setup, but it's small enough that adapting it should be pa
 
 **`pi5/slow`** — every 30 seconds, because these are slower or more expensive to read: NVMe health from SMART, ban counters from the host's intrusion-prevention tools, and the firewall ruleset parsed into JSON.
 
-**`pi5/services`** — every 30 seconds: every systemd service unit, running or not, as a list:
+**`pi5/services`** — every 30 seconds: every systemd service on the machine, whether it's running or not. Each one looks like this:
 
 ```json
-[{"name": "mosquitto.service", "active": "active", "sub": "running", "enabled": "enabled", "description": "Mosquitto MQTT Broker", "favorite": true}]
+{
+  "name": "mosquitto.service",
+  "active": "active",
+  "sub": "running",
+  "enabled": "enabled",
+  "description": "Mosquitto MQTT Broker",
+  "favorite": true
+}
 ```
 
-Most of the list will be `inactive` — timer jobs between runs, on-demand and boot-only units — and that's normal. `enabled` is the unit file state (`enabled`, `disabled`, `static`, `masked`, …, or empty when there's no unit file), so a dashboard can tell a unit that's meant to be idle from an `enabled` one that isn't running.
+Don't be alarmed when most of the list says `inactive`. Plenty of services only run for a moment — a nightly cleanup, something that fires at boot, something that waits until it's needed — and sit idle the rest of the time. The one to watch for is `failed`. `enabled` tells you whether the service is set to start on its own, which helps when you want to hide the noise.
 
-**`pi5/docker`** — every 30 seconds: every Docker container, running or not. An empty list if Docker isn't installed or the service user can't reach it:
+**`pi5/docker`** — every 30 seconds: every container, running or stopped. If Docker isn't installed, it's just an empty list.
 
 ```json
-[{"name": "pihole", "image": "pihole/pihole", "state": "running", "status": "Up 3 days", "favorite": false}]
+{
+  "name": "pihole",
+  "image": "pihole/pihole",
+  "state": "running",
+  "status": "Up 3 days",
+  "favorite": false
+}
 ```
 
-Every topic goes out with `retain=True`, so anything that subscribes gets the last known state right away instead of waiting for the next tick.
+Everything is published as retained, so a dashboard that connects gets the latest numbers straight away instead of staring at blanks until the next update.
 
 Payload shapes are defined in `collectors.py` and `services.py` — that's the place to add, drop or rename fields to match your own machine.
 
@@ -50,17 +65,17 @@ For example:
 {"action": "rgb_color", "color": "#00ff00"}
 ```
 
-The extra fields are required and checked before anything is sent: a malformed colour, an out-of-range number or a string where a number belongs is logged and dropped, never passed on. Valid commands become JSON POSTs to the Pironman5 API, which the case software runs locally — no shell is involved, so nothing in a payload can end up executed.
+Every value is checked before it goes anywhere. A colour that isn't a real colour, or a brightness of 500, gets ignored and noted in the log rather than sent to the case. The valid ones are passed on to the Pironman5 software running on the Pi.
 
 ### Favourites
 
-Each entry in `pi5/services` and `pi5/docker` carries a `favorite` flag, so a dashboard can pick which ones to feature. To change one, publish to `pi5/control/services`:
+Out of a hundred-odd services you probably care about five. Mark those as favourites and a dashboard can show them up front and tuck the rest away. To star one, publish to `pi5/control/services`:
 
 ```json
 {"action": "favorite", "source": "systemd", "name": "mosquitto.service", "value": true}
 ```
 
-`source` is `systemd` or `docker`, and `name` has to match an entry that currently exists. The daemon saves the change to `favorites.json` next to the code (gitignored, survives restarts and updates) and republishes that topic straight away, so the new flag shows up within a moment instead of on the next 30-second tick.
+Use `"source": "docker"` for containers, and `"value": false` to unstar. Favourites are saved on the Pi in `favorites.json`, so they survive restarts and updates, and every browser sees the same ones. The change shows up within a moment — no waiting for the next 30-second update.
 
 ## Requirements
 
@@ -68,7 +83,14 @@ A Raspberry Pi running a systemd-based distro, Python 3.9+, and an MQTT broker i
 
 Beyond that, the collectors shell out to ordinary Linux tooling — SMART, systemd, the firewall, the VPN. Whatever isn't installed simply reports zero, `false` or an empty list instead of crashing, so you can run it on a bare Pi and fill in the gaps later. The Pironman5 controls need the case software running; without it the RGB and fan fields stay at their defaults.
 
-Two things worth knowing for the service lists: `pi5/services` needs systemd 246 or newer (Raspberry Pi OS Bookworm ships 252), and `pi5/docker` only fills in if the user the service runs as can talk to Docker — usually that means `sudo usermod -aG docker $USER` and a restart of the service.
+If the Docker list comes back empty even though you have containers, the daemon probably isn't allowed to talk to Docker. Add your user to the `docker` group and restart the service:
+
+```bash
+sudo usermod -aG docker $USER
+sudo systemctl restart pi5_mqtt
+```
+
+The service list needs a reasonably recent systemd — anything from Raspberry Pi OS Bookworm onwards is fine.
 
 ## Getting it running
 
@@ -140,15 +162,21 @@ Then the host-specific half. **Leave any of these empty and that metric is skipp
 
 ## Serving the dashboard
 
-The daemon can also serve [Pi5 Dashboard](https://github.com/Alex93IDE/Pi5_Dashboard) itself, so you don't need nginx for a LAN or VPN setup. Set `HTTP_PORT` in `.env`, then point the dashboard's `DEPLOY_TARGET` at this repo's `public/` folder and run `npm run deploy` there:
+You don't need nginx or a separate web server to run [Pi5 Dashboard](https://github.com/Alex93IDE/Pi5_Dashboard) — the daemon can hand it out itself. Pick a port in `.env`:
+
+```
+HTTP_PORT=3010
+```
+
+Then, in the dashboard project, point the deploy at this repo's `public/` folder and run `npm run deploy`:
 
 ```
 DEPLOY_TARGET=user@pi:~/Pi5_mqtt/public/
 ```
 
-No restart needed after a deploy — files are read on every request. Unknown routes fall back to `index.html`, so reloading the page on any route works. The browser still talks to the broker over its WebSocket listener; this only hands out the files.
+That's it — open `http://<your-pi>:3010`. Later deploys show up on the next page reload, no restart needed.
 
-It's plain HTTP with no auth, so keep it on your LAN or VPN and let ufw decide who gets in. The examples use port 3010, as in `.env.example`; the browser also needs to reach the broker's WebSocket port, so open that one to the same networks:
+This is meant for your home network or your VPN, not the internet: there's no password on the page itself. Open the port only to the networks you trust. The dashboard also talks to the broker directly from your browser, so its WebSocket port (9001 here) needs the same treatment:
 
 ```bash
 sudo ufw allow from 192.168.1.0/24 to any port 3010 proto tcp comment 'pi5_dash'
@@ -161,7 +189,7 @@ sudo ufw allow in on wg0 to any port 9001 proto tcp comment 'mqtt ws'
 
 Worth reading before you point this at anything:
 
-- **The payload describes your machine.** It includes the local IP, the firewall ruleset and the full list of services and containers on the machine. That's the whole point on a private dashboard, but it's a gift to anyone else. Only publish to a broker you control, with authentication on, and use TLS if it's reachable beyond your LAN or VPN.
+- **The payload describes your machine.** It includes the local IP, the firewall ruleset and every service and container you run. That's the whole point on a private dashboard, but it's a gift to anyone else. Only publish to a broker you control, with authentication on, and use TLS if it's reachable beyond your LAN or VPN.
 - **The control topics have no authorisation of their own.** Anyone who can publish to them can drive the case hardware or change favourites. Broker-level ACLs are what keeps that honest.
 - **Nothing here should face the internet directly.** There's no auth layer in this code, by design — it assumes it's sitting behind a broker that has one.
 
