@@ -74,6 +74,10 @@ All settings live in `.env`. See `.env.example` for the full list: broker, topic
 
 The payload describes your machine, and the control topics have no authentication of their own. Use a broker you control, with authentication and ACLs, and keep it on your LAN or VPN.
 
+## Project status
+
+A personal project, actively used on my own Pi. Versions follow [SemVer](https://semver.org); the daemon logs its version on startup.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

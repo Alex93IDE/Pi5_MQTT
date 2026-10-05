@@ -16,6 +16,7 @@ from .services import systemd, docker, control as services_control
 from .scheduler import Publisher, Scheduler, merged
 from .mqtt import create_client, shutdown
 from .web import start_server
+from . import __version__
 
 log = logging.getLogger("main")
 
@@ -56,7 +57,7 @@ def main():
     client     = create_client(build_routes(publishers))
     scheduler  = Scheduler(client, publishers.values())
     scheduler.start()
-    log.info("Publisher started. Ctrl+C to exit.")
+    log.info("Publisher v%s started. Ctrl+C to exit.", __version__)
 
     while not stop.wait(1):
         pass
