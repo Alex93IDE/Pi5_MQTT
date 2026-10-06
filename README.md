@@ -76,7 +76,7 @@ The payload describes your machine, and the control topics have no authenticatio
 
 ## Project status
 
-A personal project, actively used on my own Pi. Versions follow [SemVer](https://semver.org); the daemon logs its version on startup.
+A personal project, actively used on my own Pi. Versions follow [SemVer](https://semver.org); the daemon logs its version on startup. To release, run `bash release.sh patch|minor|major` on a clean `main`: it bumps `pi5mqtt/__init__.py`, commits, tags `vX.Y.Z` and offers to push.
 
 ## License
 
